@@ -40,20 +40,33 @@ saveX = "tradX"                     ### Table for saving X output in dbOutput
 saveY = "tradY"                     ### Table for saving Y output in dbOutput
 
 ## Dataset parameters
-horiz = 1                          ### time horizon of the investment in days ###
+horiz = 10                          ### time horizon of the investment in days ###
 eval_trigger = 0.005
 arima_p = 0
 arima_d = 0
 arima_q = 0
 trigger_drop = 0.1                      ### percentage of nan in a column of X that causes deletion of the column
 drop_rows = 50                      ### Number of unrelevant rows given technical indicators computation
-nn_start = 500                    ### initial value of X and Y matrices out of the total dataset
+nn_start = 50                    ### initial value of X and Y matrices out of the total dataset
 nn_size = 2000                     ### length of the X & Y matrices starting from lstmStart index
-proportionTrain = 0.875 
+proportionTrain = 0.975
+trigger = 0.1                      ### percentage of nan in a column of X that causes deletion of the column
+
+## Type Strategy & optimization Regr_close  => y = future close price
+#                               Regr_ret => y = futur return on investment
+#                               Class_ret => y = [-1, 0, 1, 2] base case = NON INVESTED
+#                               Class_inve=> y = [-1, 1] base case = NON INVESTED
+modeRC = 'regr'                 ### 'class' = classification  |  'regr' = regression  
+class_trig = 0.45                   ### trigger for investment decision for classification
+regr_trig = 0.001                   ### trigger for investment decision for regression
+if modeRC == 'class':
+    eval_trigger = class_trig
+else:
+    eval_trigger = regr_trig
 
 X_plot = 0                          ### 1 for plot close price  /  0 for no plot
 
-### ====   PART 1.A Connecting to SQL DB, loading lists and preparing data ============
+### ====   PART 1.A Connecting to SQL DB and loading lists ============
 dataX, dataY = get_model_data(dbInput, dbList, ric, horiz, drop_rows)
 dataX = get_technical_indicators(dataX)
 #dataX = get_arima(dataX, arima_p, arima_q, arima_d)
@@ -63,28 +76,26 @@ dataY = get_droprows(dataY, drop_rows)
 dataX = get_cleandupli_dataset(dataX)                       # prevent duplicated columns
 dataX = get_model_cleanXset(dataX, trigger_drop)                 # Clean X matrix for insufficient data
 
+
 ys = np.array(dataY)
 res = ys[:,2] * 1               # array with effective return over the horizon
-futClose = ys[:,3] * 1          # array with future close price of the asset
+futClose = ys[:,3] * 1          # array with future close of the stock
 
-(X_train, y_train), (X_test, y_test), (res_train, res_test) = get_train_test_price(dataX, dataY, nn_start, nn_size, proportionTrain)
+(X_train, y_train), (X_test, y_test), (res_train, res_test) = get_train_test_return(dataX, dataY, nn_start, nn_size, proportionTrain, modeRC)
 (X_train, X_test), (train_mean, train_std) = get_model_scaleX(X_train, X_test)
-y_train = (y_train - train_mean[0,]) / train_std[0,]          # y = close price => regression on predicting future price
-y_test = (y_test - train_mean[0,]) / train_std[0,]
-
 
 ### ====   PART 2.B Input & define Model  =  INPUT REQUIRED ============
 ## Model & Hyper-parameters
-validation_split = 0.05
+validation_split = 0.1
 model = keras.Sequential()
 dropout = 0.1
 optimizer = 'adam'                      ### Optimizer of the compiled model
 learning = 0.001
-#loss = custom_return_loss_function
-loss = 'mean_squared_error'
+loss = custom_return_loss_function
+# loss = 'mean_squared_error'
 verbose = 0                         ### 0 = hidden computation  //  1 = computation printed
-batch_size = 128
-epochs = 15
+batch_size = 64
+epochs = 50
 layer_1 = 128
 layer_2 = 256
 
@@ -114,19 +125,16 @@ print('Time preparing data = ',f'Time: {time.time() - start_time}')
 model, history = model_compile_train(model, loss, optimizer, X_train, y_train, epochs, batch_size, validation_split, verbose)
 eval_train, eval_test, y_pred = model_predict(model, history, X_train, y_train, X_test, y_test)
 
-y_pred = (y_pred * train_std[0,]) + train_mean[0,]          # y = close price => regression on predicting future price
-y_test = (y_test * train_std[0,]) + train_mean[0,]          # y = close price => regression on predicting future price
-X_ref = (X_test[:,0] * train_std[0,]) + train_mean[0,]
 plt.plot(y_test)
 plt.plot(y_pred)
-plt.title('Close price : real vs predicted')
-plt.ylabel('Price')
+plt.title('Return : real vs predicted')
+plt.ylabel('Return')
 plt.xlabel('Days')
-plt.legend(['Real y', 'predicted y'], loc='upper left')
+plt.legend(['Real return', 'Predicted return'], loc='upper left')
 plt.show()
 
 ## compute investment proposition and its accuracy
-y_testdec, y_predict, confmat = model_eval_price(X_ref, y_test, y_pred, eval_trigger)
+y_testdec, y_predict, confmat = model_eval_return(res_test, y_test, y_pred, eval_trigger)
 if confmat.shape[0] == 1:
     precis = 1 * 0
     recall = 1 * 0
