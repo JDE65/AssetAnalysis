@@ -27,9 +27,6 @@ import tensorflow as tf
 import tensorflow.keras
 from tensorflow.keras import backend as K
 
-
-
-
 ###--- 2. Custom loss functions for training ---###
 def custom_return_loss_function(y_actual, y_predicted):
     diff_y = K.square(y_actual- np.squeeze(y_predicted))
@@ -52,7 +49,7 @@ def custom_price_loss_function(y_actual, y_predicted): ### To be IMPROVED
 
 ###--- 3. Compile model for training ---###
 def model_compile_train(model, loss, optimizer, X_train, y_train, epochs, batch_size, validation_split, verbose = 0):
-    model.compile(loss = loss, optimizer = optimizer)
+    model.compile(loss = loss, optimizer = optimizer, metrics=['accuracy'])
     history = model.fit(X_train, y_train, epochs = epochs, batch_size = batch_size, validation_split = validation_split, verbose = verbose)
     return model, history
 
@@ -66,6 +63,7 @@ def model_predict(model, history, X_train, y_train, X_test, y_test):
 
 
 ###--- 4. evaluate, predict and assess 
+## Analysis for regression on price value
 def model_eval_price(X_ref, y_test, y_pred, eval_trigger):
     y_testdec = (y_test - X_ref) / X_ref
     y_predict = (y_pred[:,0] - X_ref) / X_ref
@@ -76,17 +74,34 @@ def model_eval_price(X_ref, y_test, y_pred, eval_trigger):
     confmat = confusion_matrix(y_testdec, y_predict)
     return y_testdec, y_predict, confmat
 
-def model_eval_return(res, y_test, y_pred, eval_trigger):
-    y_testdec = y_test * 1
+## Analysis of classification if only very strong performance is selected
+def model_eval_return(y_test, y_pred, eval_trigger, modeRC, nb_classes, trig_up = 0):
+    y_testdec = y_test[:,0]
     y_predict = y_pred[:,0] * 1
+    if (modeRC== 'class') & (nb_classes > 2):
+        if trig_up > 0:
+            y_testdec = y_test[:,0] + y_test[:,2]
+            y_predict = y_pred[:,0] + y_pred[:,2]
     y_predict[y_predict[:,] >= eval_trigger] = 1   # predicted price > close_price by expected trigger => buy
     y_predict[y_predict[:,] < eval_trigger] = 0   # predicted price < close_price by expected trigger => NO buy
-    y_testdec[y_testdec[:,] >= eval_trigger] = 1    # future price > close_price by expected trigger => buy
-    y_testdec[y_testdec[:,] < eval_trigger] = 0
-            
     confmat = confusion_matrix(y_testdec, y_predict)
+    if (modeRC== 'class') & (nb_classes > 2):
+        if trig_up > 0:
+            y_predict[y_pred[:,2]>eval_trigger] += 1
     return y_testdec, y_predict, confmat
 
+## Analysis of classification if only very strong performance is selected
+def model3D_eval_topreturn(y_test, y_pred, eval_trigger, modeRC, nb_classes, trig_up = 0):
+    y_testdec = y_test[:,0]
+    y_predict = y_pred[:,0] * 1
+    if (modeRC== 'class') & (nb_classes > 2):
+        if trig_up > 0:
+            y_testdec = y_test[:,2]
+            y_predict = y_pred[:,2]
+    y_predict[y_predict[:,] >= eval_trigger] = 1   # predicted price > close_price by expected trigger => buy
+    y_predict[y_predict[:,] < eval_trigger] = 0   # predicted price < close_price by expected trigger => NO buy
+    confmat = confusion_matrix(y_testdec, y_predict)
+    return y_testdec, y_predict, confmat
 
 ###--- 5. Analyse prediction F1
 def get_F1(confmat):    
@@ -110,11 +125,8 @@ def model_eval_result(y_testdec, y_predict, res_test):
     nbDeals_test = y_testdec[y_testdec == 1].sum()
     nbDeals_pred = y_predict[y_predict == 1].sum()
     nbDeals_bhst = len(y_testdec)    
-
     
     return (nbDeals_bhst, nbDeals_test, nbDeals_pred), (bhst_result, test_result, pred_result)
-
-
 
 
 
