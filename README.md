@@ -2,7 +2,7 @@
 Asset analysis : downloading Assets infos and correlated assets for analysis
 The schema always follows the structure presented herewith.
 
-The repository includes (and/or will include) various codes to :
+The repository includes (and/or will include) various codes to : 
 0. Load the libraries
 1. Ask for inputs : hyper-parameters & parameters
 2. Connect to DBs and load the data
