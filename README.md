@@ -1,4 +1,4 @@
-# AssetAnalysis - WIP
+# AssetAnalysis - OLD
 Asset analysis : downloading Assets infos and correlated assets for analysis
 
 The repository includes (and/or will include) the codes to :
